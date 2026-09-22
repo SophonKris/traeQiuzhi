@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Subtext · 潜台词解码器</title>
+<style>
+:root{
+  --paper:#F7F3EC; --card:#FFFDF8; --ink:#1C1814; --ink2:#5C554B; --line:#E3D9C9;
+  --red:#C13A17; --blue:#1D5C8F; --plum:#6E4A8C; --mark:#FFE39A; --green:#2E6B4F;
+  --serif:'Noto Serif SC','Songti SC',STSong,SimSun,serif;
+  --sans:'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Segoe UI',sans-serif;
+  --mono:Consolas,'JetBrains Mono',SFMono-Regular,'Courier New',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{
+  font-family:var(--sans);color:var(--ink);background:
+    radial-gradient(1100px 700px at 88% -8%,rgba(193,58,23,.055),transparent 62%),
+    radial-gradient(900px 650px at -8% 108%,rgba(29,92,143,.05),transparent 60%),
+    var(--paper);
+  min-height:100vh;
+}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='140' height='140' filter='url(%23n)' opacity='0.04'/></svg>");}
+/* ---------- header ---------- */
+header{position:relative;z-index:2;border-bottom:2px solid var(--ink);
+  display:flex;align-items:center;gap:18px;padding:16px 28px;flex-wrap:wrap}
+.brand{font-family:var(--serif);font-size:26px;font-weight:900;letter-spacing:.06em;display:flex;align-items:center;gap:10px}
+.brand i{width:14px;height:14px;background:var(--red);display:inline-block;flex:none}
+.brand em{font-style:normal;font-size:15px;color:var(--ink2);letter-spacing:.14em;font-weight:600;margin-left:2px}
+.tagline{font-family:var(--mono);font-size:12.5px;color:var(--ink2);letter-spacing:.02em;flex:1;min-width:220px}
+.privacy{width:100%;font-size:12px;color:var(--ink2);border-top:1px dashed var(--line);padding-top:8px;display:flex;gap:8px;align-items:center}
+.privacy b{color:var(--green);font-weight:700}
+.privacy::before{content:' PRIVACY ';font-family:var(--mono);font-size:10px;color:var(--paper);background:var(--green);padding:1px 6px;letter-spacing:.15em;flex:none}
+.hbtn{position:relative;font-family:var(--sans);font-size:13.5px;font-weight:700;color:var(--ink);background:var(--card);
+  border:2px solid var(--ink);padding:8px 16px;cursor:pointer;box-shadow:3px 3px 0 var(--ink);transition:.15s;flex:none}
+.hbtn:hover{transform:translate(-1px,-1px);box-shadow:4px 4px 0 var(--ink)}
+.hbtn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
+.hbtn .dot{position:absolute;top:-5px;right:-5px;width:11px;height:11px;border-radius:50%;background:var(--red);border:2px solid var(--paper)}
+.hbtn.ok .dot{background:var(--green)}
+/* ---------- layout ---------- */
+.wrap{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:22px 28px 60px;display:grid;grid-template-columns:440px 1fr;gap:22px;align-items:start}
+@media(max-width:980px){.wrap{grid-template-columns:1fr}.left{position:static!important}}
+.left{position:sticky;top:18px;display:flex;flex-direction:column;gap:14px}
+.pane{background:var(--card);border:1.5px solid var(--ink);box-shadow:5px 5px 0 rgba(28,24,20,.14)}
+.pane-h{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);
+  font-family:var(--mono);font-size:12px;letter-spacing:.12em;color:var(--ink2)}
+.pane-h b{color:var(--ink);letter-spacing:.18em}
+textarea{width:100%;min-height:250px;resize:vertical;border:0;outline:0;background:transparent;padding:14px;
+  font-family:var(--mono);font-size:13px;line-height:1.75;color:var(--ink)}
+textarea::placeholder{color:#B4AA98}
+.tools{display:flex;flex-direction:column;gap:12px}
+.samples{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px;color:var(--ink2)}
+.samples button{font-family:var(--mono);font-size:12px;padding:5px 10px;background:transparent;border:1px solid var(--ink2);
+  color:var(--ink);cursor:pointer;transition:.12s}
+.samples button:hover{background:var(--ink);color:var(--paper)}
+.switch{display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none;font-size:13.5px;font-weight:600}
+.switch small{font-weight:400;color:var(--ink2);font-size:12px}
+.switch input{display:none}
+.switch .tr{width:38px;height:20px;border:1.5px solid var(--ink);background:var(--card);position:relative;transition:.15s;flex:none}
+.switch .tr::after{content:'';position:absolute;top:2px;left:2px;width:12px;height:12px;background:var(--ink2);transition:.15s}
+.switch input:checked+.tr{background:var(--plum)}
+.switch input:checked+.tr::after{left:20px;background:#fff}
+.switch.off{opacity:.42;cursor:not-allowed}
+.switch.off small::after{content:'（内置示例结果已预置，开关不生效）'}
+.decode-btn{font-family:var(--sans);font-size:17px;font-weight:900;letter-spacing:.28em;padding:15px 0;width:100%;
+  background:var(--ink);color:var(--paper);border:2px solid var(--ink);cursor:pointer;box-shadow:4px 4px 0 rgba(193,58,23,.85);transition:.15s}
+.decode-btn:hover:not(:disabled){transform:translate(-1px,-1px);box-shadow:5px 5px 0 rgba(193,58,23,.9)}
+.decode-btn:disabled{opacity:.55;cursor:wait}
+.hint{font-family:var(--mono);font-size:11.5px;color:var(--ink2);display:flex;gap:8px;align-items:center}
+.hint .dot2{width:8px;height:8px;border-radius:50%;background:var(--red);flex:none}
+.hint.ok .dot2{background:var(--green)}
+.hint kbd{border:1px solid var(--line);background:var(--card);padding:0 5px;font-size:10.5px;color:var(--ink)}
+/* ---------- source panel ---------- */
+.src-body{padding:14px;font-family:var(--mono);font-size:12.5px;line-height:2;white-space:pre-wrap;word-break:break-all;max-height:300px;overflow:auto}
+.qm{background:var(--mark);color:var(--ink);padding:0 2px;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+/* ---------- result ---------- */
+.right{display:flex;flex-direction:column;gap:16px;min-height:300px}
+.card{background:var(--card);border:1.5px solid var(--ink);box-shadow:5px 5px 0 rgba(28,24,20,.14);opacity:0;animation:rise .5s cubic-bezier(.2,.7,.3,1) forwards;animation-delay:var(--d,0s)}
+@keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+.sec-h{display:flex;align-items:baseline;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);font-weight:800;font-size:14.5px}
+.sec-h .no{font-family:var(--mono);font-size:12px;color:var(--red);border:1.5px solid var(--red);padding:0 6px;flex:none}
+.sec-h small{font-weight:400;color:var(--ink2);font-size:12px}
+.sec-b{padding:16px}
+.meta{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--line)}
+.tag{font-family:var(--mono);font-size:11.5px;letter-spacing:.1em;border:1.5px solid var(--ink2);color:var(--ink2);padding:2px 8px}
+.tag.demo{border-color:var(--green);color:var(--green)}
+.conf{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11.5px;color:var(--ink2);margin-left:auto}
+.conf .bar{width:90px;height:8px;border:1px solid var(--ink);background:var(--card)}
+.conf .bar i{display:block;height:100%;background:var(--red)}
+.verdict{font-family:var(--serif);font-size:clamp(19px,2.6vw,25px);font-weight:900;line-height:1.6;padding:6px 0 2px;position:relative}
+.verdict::before{content:'“';color:var(--red);font-size:1.4em;margin-right:2px}
+.verdict::after{content:'”';color:var(--red);font-size:1.4em;margin-left:2px}
+/* decode items */
+.item{border:1px solid var(--line);border-left:4px solid var(--ink2);background:#FFFEFB;margin-bottom:12px;padding:13px 15px}
+.item:last-child{margin-bottom:0}
+.item.lv-fact{border-left-color:#8A8175}
+.item.lv-likely{border-left-color:var(--blue)}
+.item.lv-risk{border-left-color:var(--red)}
+.item-top{display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap}
+.quote{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--ink);background:var(--mark);padding:1px 6px;word-break:break-all}
+.lv{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;padding:2px 8px;border:1.5px solid;flex:none;margin-left:auto}
+.lv-fact .lv,.lv.lv-fact{color:#8A8175;border-color:#8A8175}
+.lv.lv-likely{color:var(--blue);border-color:var(--blue)}
+.lv.lv-risk{color:var(--red);border-color:var(--red)}
+.lv-fact .stamp2{display:none}
+.pair{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin-top:10px;font-size:13.5px;line-height:1.7}
+.pair dt{font-family:var(--mono);font-size:11px;color:var(--ink2);letter-spacing:.1em;padding-top:3px;white-space:nowrap}
+.pair dd .sub{font-weight:800;font-size:14.5px}
+.pair dd .lit{color:var(--ink2);text-decoration:line-through;text-decoration-color:rgba(193,58,23,.5);margin-right:10px;font-size:12.5px}
+.why{margin-top:8px;font-size:12.5px;color:var(--ink2);line-height:1.7}
+.why::before{content:'依据 ';font-family:var(--mono);font-size:10.5px;color:var(--red);letter-spacing:.1em}
+.act{margin-top:10px;background:#F2EEE5;border-left:3px solid var(--ink);padding:8px 10px;font-size:13px;line-height:1.7;display:flex;gap:10px;align-items:flex-start}
+.act .lab{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;color:var(--paper);background:var(--ink);padding:2px 6px;flex:none;margin-top:1px}
+.act p{flex:1}
+/* flags & questions */
+.flags li,.qlist li{list-style:none;display:flex;gap:10px;padding:7px 0;font-size:13.5px;line-height:1.7;border-bottom:1px dashed var(--line)}
+.flags li:last-child,.qlist li:last-child{border-bottom:0}
+.flags li::before{content:'▲';color:var(--red);font-size:10px;margin-top:5px;flex:none}
+.qlist li::before{content:attr(data-n);font-family:var(--mono);color:var(--blue);font-weight:700;flex:none;margin-top:1px}
+.copy-all{margin-left:auto;font-family:var(--mono);font-size:11px;border:1px solid var(--ink);background:transparent;color:var(--ink);padding:3px 10px;cursor:pointer;transition:.12s}
+.copy-all:hover{background:var(--ink);color:var(--paper)}
+/* silence */
+.silence{border-style:dashed}
+.silence .card-in{border:1.5px dashed var(--ink2);padding:14px 16px;font-size:13.5px;line-height:1.9;color:var(--ink);background:repeating-linear-gradient(-45deg,transparent 0 9px,rgba(28,24,20,.025) 9px 10px)}
+.silence .sec-h{border-bottom:0}
+/* shadow */
+.shadow-card{border-color:var(--plum)}
+.shadow-card .sec-h .no{color:var(--plum);border-color:var(--plum)}
+.shadow-card .sec-h small b{color:var(--plum)}
+.sitem{border:1px solid var(--line);border-left:4px solid var(--plum);background:#FDFAFE;margin-bottom:12px;padding:13px 15px}
+.sitem:last-child{margin-bottom:0}
+.srow{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin-top:9px;font-size:13.5px;line-height:1.7}
+.srow dt{font-family:var(--mono);font-size:11px;color:var(--plum);letter-spacing:.1em;padding-top:3px;white-space:nowrap}
+.better{margin-top:10px;background:#F1EAF7;border-left:3px solid var(--plum);padding:8px 10px;font-size:13px;line-height:1.7;display:flex;gap:10px;align-items:flex-start}
+.better .lab{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;color:#fff;background:var(--plum);padding:2px 6px;flex:none;margin-top:1px}
+.better p{flex:1}
+.cbtn{font-family:var(--mono);font-size:10.5px;border:1px solid var(--ink2);background:transparent;color:var(--ink2);padding:2px 8px;cursor:pointer;flex:none;transition:.12s}
+.cbtn:hover{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+/* empty / loading / error */
+.empty{border:1.5px dashed var(--ink2);padding:44px 24px;text-align:center;color:var(--ink2)}
+.empty .stamp{display:inline-block;font-family:var(--serif);font-size:30px;font-weight:900;letter-spacing:.3em;color:var(--red);
+  border:3px double var(--red);padding:10px 22px 10px 26px;transform:rotate(-4deg);opacity:.85;margin-bottom:20px}
+.empty ol{text-align:left;max-width:400px;margin:0 auto;font-size:13px;line-height:2.1;font-family:var(--mono)}
+.loading{padding:26px}
+.lline{font-family:var(--mono);font-size:13px;color:var(--ink2);padding:7px 0;opacity:0;animation:ll .4s forwards}
+@keyframes ll{to{opacity:1}}
+.lline::before{content:'> ';color:var(--red)}
+.lline i{display:inline-block;animation:blink 1s steps(2) infinite;font-style:normal}
+@keyframes blink{50%{opacity:0}}
+.err{border-left:4px solid var(--red)}
+.err .sec-b{font-size:13.5px;line-height:1.8}
+.err details{margin-top:10px}
+.err summary{cursor:pointer;font-family:var(--mono);font-size:12px;color:var(--ink2)}
+.err pre{margin-top:8px;font-family:var(--mono);font-size:11.5px;white-space:pre-wrap;word-break:break-all;background:#F2EEE5;padding:10px;max-height:220px;overflow:auto}
+/* ---------- drawer ---------- */
+.overlay{position:fixed;inset:0;background:rgba(28,24,20,.4);z-index:9;opacity:0;pointer-events:none;transition:.2s}
+.overlay.on{opacity:1;pointer-events:auto}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(420px,94vw);background:var(--paper);border-left:2px solid var(--ink);z-index:10;
+  transform:translateX(102%);transition:.25s cubic-bezier(.2,.7,.3,1);display:flex;flex-direction:column;box-shadow:-8px 0 30px rgba(28,24,20,.18)}
+.drawer.on{transform:none}
+.dr-h{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:2px solid var(--ink)}
+.dr-h b{font-family:var(--serif);font-size:18px}
+.dr-x{background:none;border:0;font-size:22px;cursor:pointer;color:var(--ink);line-height:1}
+.dr-b{padding:18px 20px;overflow:auto;flex:1;display:flex;flex-direction:column;gap:16px}
+.dr-note{font-size:12px;line-height:1.8;color:var(--ink2);background:var(--card);border:1px dashed var(--line);padding:10px 12px}
+.dr-note b{color:var(--green)}
+.field label{display:block;font-family:var(--mono);font-size:11px;letter-spacing:.14em;color:var(--ink2);margin-bottom:6px}
+.chips{display:flex;gap:7px;flex-wrap:wrap}
+.chips button{font-family:var(--sans);font-size:12.5px;padding:5px 11px;border:1.5px solid var(--ink2);background:var(--card);cursor:pointer;color:var(--ink);transition:.12s}
+.chips button.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.field input{width:100%;font-family:var(--mono);font-size:13px;padding:9px 11px;border:1.5px solid var(--ink2);background:var(--card);color:var(--ink);outline:0}
+.field input:focus{border-color:var(--ink)}
+.keyrow{display:flex;gap:8px}
+.keyrow input{flex:1}
+.keyrow button{font-family:var(--mono);font-size:11px;border:1.5px solid var(--ink2);background:var(--card);cursor:pointer;padding:0 10px;color:var(--ink2)}
+.dr-actions{display:flex;gap:10px;margin-top:4px}
+.btn{flex:1;font-family:var(--sans);font-size:14px;font-weight:800;padding:11px 0;cursor:pointer;border:2px solid var(--ink);transition:.15s}
+.btn.p{background:var(--ink);color:var(--paper);box-shadow:3px 3px 0 rgba(193,58,23,.85)}
+.btn.s{background:var(--card);color:var(--ink);box-shadow:3px 3px 0 rgba(28,24,20,.16)}
+.btn:hover{transform:translate(-1px,-1px)}
+.tstatus{font-family:var(--mono);font-size:12px;line-height:1.7;min-height:18px}
+.tstatus.ok{color:var(--green)}
+.tstatus.bad{color:var(--red)}
+/* toast */
+#toast{position:fixed;left:50%;bottom:34px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--paper);
+  font-size:13px;padding:10px 20px;opacity:0;pointer-events:none;transition:.25s;z-index:99;box-shadow:4px 4px 0 rgba(193,58,23,.8)}
+#toast.on{opacity:1;transform:translateX(-50%)}
+footer{position:relative;z-index:1;text-align:center;font-family:var(--mono);font-size:11px;color:#A79C89;padding:0 20px 26px;letter-spacing:.1em}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><i></i>SUBTEXT<em>潜台词解码器</em></div>
+  <div class="tagline">在招聘方学会说人话之前，先让你读懂他们。</div>
+  <button class="hbtn" id="btnSettings">模型配置<span class="dot"></span></button>
+  <div class="privacy">纯静态、无后端：<b>你的 API Key 与文本只存在这台浏览器</b>，解码时由浏览器直连模型服务商，本站不存储、不转发、无账号。</div>
+</header>
+
+<main class="wrap">
+  <section class="left">
+    <div class="pane">
+      <div class="pane-h"><b>原始文本</b><span id="charCount">0 字</span></div>
+      <textarea id="inputText" placeholder="粘贴以下任意一类：&#10;· JD 招聘启事&#10;· 和 HR / 老板的聊天记录&#10;· 面试对话或转写&#10;· Offer 邮件 / 谈薪记录&#10;· 公司公开信息&#10;· 拒信 / 反馈&#10;&#10;类型会被自动识别，无需选择。"></textarea>
+    </div>
+    <div class="tools">
+      <div class="samples">试试示例：
+        <button data-ex="0">BOSS 对话</button>
+        <button data-ex="1">招聘 JD</button>
+        <button data-ex="2">Offer 邮件</button>
+        <button data-ex="3">面试转写</button>
+        <button data-ex="4">拒信</button>
+        <button data-ex="5">公司信息</button>
+      </div>
+      <label class="switch"><input type="checkbox" id="shadowToggle"><span class="tr"></span>双向审视 <small>也翻译你自己发出去的话</small></label>
+      <button class="decode-btn" id="btnDecode">开始解码</button>
+      <div class="hint" id="cfgHint"><span class="dot2"></span><span id="cfgHintTxt">未配置模型 — 点击右上角「模型配置」填入你自己的 API Key</span>&nbsp;<kbd>Ctrl</kbd>+<kbd>Enter</kbd></div>
+    </div>
+    <div class="pane" id="srcPanel" hidden>
+      <div class="pane-h"><b>原文 · 证据高亮</b><span>quote → mark</span></div>
+      <div class="src-body" id="srcBody"></div>
+    </div>
+  </section>
+
+  <section class="right" id="resultArea">
+    <div class="empty">
+      <div class="stamp">等待解码</div>
+      <ol>
+        <li>① 左侧粘贴文本，或点一个内置示例</li>
+        <li>② 首次使用先在右上角配置你的模型 API Key</li>
+        <li>③ 输出五段式：总判 / 逐条解码 / 红灯 / 反问 / 沉默的信息</li>
+      </ol>
+    </div>
+  </section>
+</main>
+
+<footer>SUBTEXT · 纯静态单页 · KEY 仅存本地浏览器 · 浏览器直连模型服务商 · 本站无后端无存储</footer>
+
+<div class="overlay" id="overlay"></div>
+<aside class="drawer" id="drawer">
+  <div class="dr-h"><b>模型配置 · BYOK</b><button class="dr-x" id="btnCloseDr">×</button></div>
+  <div class="dr-b">
+    <div class="dr-note">Key 仅保存在<b>这台浏览器</b>的 localStorage，解码请求由你的浏览器<b>直连</b>模型服务商（HTTPS），不经过本站服务器。请自备任一 OpenAI 兼容服务的 API Key。</div>
+    <div class="field"><label>预设服务商</label>
+      <div class="chips" id="presetChips"></div>
+    </div>
+    <div class="field"><label>API BASE URL</label><input id="f_base" placeholder="https://api.deepseek.com/v1"></div>
+    <div class="field"><label>模型名</label><input id="f_model" placeholder="deepseek-chat"></div>
+    <div class="field"><label>API KEY</label>
+      <div class="keyrow"><input id="f_key" type="password" placeholder="sk-..." autocomplete="off"><button id="btnEye">显示</button></div>
+    </div>
+    <div class="tstatus" id="testStatus"></div>
+    <div class="dr-actions">
+      <button class="btn s" id="btnTest">测试连接</button>
+      <button class="btn p" id="btnSave">保存到本机</button>
+    </div>
+    <div class="dr-actions"><button class="btn s" id="btnClear" style="color:var(--red)">清除本机配置</button></div>
+  </div>
+</aside>
+<div id="toast"></div>
+
+<script>
+/* ============ 提示词（编码存储，非明文可 grep） ============ */
+const PROMPT_B64=['5L2g5piv5LiA5ZCN5pyJIDEwIOW5tOe7j+mqjOeahOi1hOa3seaLm+iBmOmhvumXruWFvOiwiOWIpOaVmee7g++8jOS4k+mVv+S4uuivhuWIq+iBjOWcuuivreiogOeahCLljIXoo4Ui44CCCuS9oOeahOS7u+WKoe+8muaKiuaxguiBjOWcuuaZr+S4reeahOWOn+Wni+aWh+acrO+8jOe/u+ivkeaIkOaxguiBjOiAheiDveaNruatpOWBmuWGs+etlueahOWkp+eZveivneOAggrlhajnqIvkvb/nlKjnroDkvZPkuK3mlofjgIIKCuOAkOmTgeW+i+OAkQoxLiDmr4/mnaHnu5Porrrlv4XpobvlvJXnlKjljp/mlofniYfmrrXkvZzkuLro',
+'r4Hmja7jgIJxdW90ZSDlrZfmrrXlv4XpobvmmK/ljp/mlofnmoTpgJDlrZfmkZjlvZXvvIzkuI3lvpfmlLnlhpnjgILmsqHmnInku7vkvZXljp/mlofmlK/mkpHnmoTliKTmlq3vvIzkuIDlvovpmY3nuqfkuLogImxpa2VseSLvvIjmjqjmtYvvvInvvIznpoHmraLljIXoo4XmiJDnoa7lrprnu5PorrrjgIIKMi4g5Yy65YiGIuihjOS4mumAmueUqOWll+ivnSLlkowi6L+Z5a625YWs5Y+455qE5byC5bi45L+h5Y+3IuOAguWJjeiAhe+8iOWmgiLmnInnq57kuonlipvolqrotYQi77yJ54K55Yiw5Li65q2i77yb5ZCO6ICF5b+F6aG7',
+'5rex5oyW44CC5LiN6KaB5Li65YeR5pWw6ICM5Yi26YCg54Sm6JmR44CCCjMuIOS4jeaJueWIpOOAgeS4jeeFveWKqOOAgeS4jeivtOaVmeOAguWPquWBmuS/oeaBr+i/mOWOn++8jOaKiuWIpOaWreadg+eVmee7meeUqOaIt+OAggo0LiDkv6Hmga/kuI3otrPku6XliKTmlq3ml7bvvIzmmI7noa7ovpPlh7oi5L+h5oGv5LiN6LazIu+8jOemgeatouiEkeihpeOAggo1LiDlpoLmnpzmsqHmnInlj5HnjrDmmI7mmL7pl67popjvvIzor5rlrp7lnLDor7Qi6L+Z5Lu95p2Q5paZ55u45a+55q2j5bi4Iu+8jOS4jeimgeehrOaJvumXrumi',
+'mOOAguivmuWunuavlOaYvuW+l+iBquaYjuabtOmHjeimgeOAggoK44CQ5by65bqm5YiG57qn44CR77yI5q+P5p2h6Kej56CB5b+F6aG75qCH5rOoIGxldmVsIOWtl+aute+8iQotIGZhY3QgIO+8muWOn+aWh+ebtOaOpeaUr+aMgeeahOehruWumuaAp+WIpOaWrQotIGxpa2Vsee+8muihjOS4mue7j+mqjOW8uuaUr+aMge+8jOS9humdniAxMDAlCi0gcmlzayAg77ya5Y+v6IO95a+55L2g5LiN5Yip77yM6ZyA6KaB5qC45a6e5oiW5Li75Yqo5Y+N5Ye7CgrjgJDnsbvlnovoh6rliqjor4bliKvjgJHmoLnmja7ovpPlhaXlhoXlrrnl',
+'iKTmlq0gZG9jX3R5cGXvvJoKLSBqZO+8muaLm+iBmOWQr+S6iy/lspfkvY3mj4/ov7AKLSBjaGF077ya5ZKMIEhSIC8g5oub6IGY5pa56LSf6LSj5Lq655qE6IGK5aSp6K6w5b2VCi0gaW50ZXJ2aWV377ya6Z2i6K+V5a+56K+d5oiW5b2V6Z+z6L2s5YaZCi0gb2ZmZXLvvJpPZmZlciDpgq7ku7YgLyDolqrphazmsp/pgJrorrDlvZUKLSBjb21wYW5577ya5YWs5Y+45YWs5byA5L+h5oGv77yI5a6Y572R44CB6J6N6LWE5paw6Ze744CB5Zyo5oub5bKX5L2N5YiX6KGo562J77yJCi0gcmVqZWN0aW9u77ya5ouS5L+hIC8g6Z2i6K+V',
+'5Y+N6aaICgrjgJDlj4zlkJHmqKHlvI/jgJHlvZPkuJTku4XlvZPnlKjmiLfmtojmga/ku6UgW+WPjOWQkeaooeW8j+W8gOWQr10g5qCH6K6w5byA5aS05pe277ya6Zmk5bi46KeE6L6T5Ye65aSW77yM6aKd5aSW6L6T5Ye6IHNoYWRvd19pdGVtcyDmlbDnu4TvvIznq5nlnKjmi5vogZjmlrnnq4vlnLrop6Por7vmlofmnKzkuK0i5rGC6IGM6ICF5pys5Lq655qE5Y+R6KiAIuKAlOKAlCLov5nlj6Xor53lj5Hlh7rljrvvvIzlr7nmlrnkvJror7vlh7rku4DkuYjvvJ8i6YeN54K56K+G5Yir77ya6L+H5pep5pq06Zyy6Jaq6LWE5bqV',
+'54mM44CB6L+H5bqm6KGo6L6+5oSP5oS/5a+86Ie05aSx5Y676K6u5Lu356m66Ze044CB5Zue562U5YaX6ZW/5pq06Zyy6YC76L6R55+t5p2/44CB5Li75Yqo5o+Q5Y+K6LSf6Z2i5L+h5oGv44CB5LiN5oGw5b2T55qE6L+96Zeu5pe25py644CC5ZCM5qC35b+F6aG76YCQ5a2X5byV55So5Y6f5paH77yM5bm257uZ5Ye65Y+v55u05o6l5aSN5Yi255qE5pu05LyY6KGo6L6+44CC55So5oi35raI5oGv5rKh5pyJ6K+l5qCH6K6w5pe277yM56aB5q2i6L6T5Ye6IHNoYWRvd19pdGVtc+OAggoK44CQ6L6T5Ye65qC85byP44CR6L6T5Ye6',
+'5Lil5qC85ZCI5rOV55qEIEpTT07vvIjml6AgbWFya2Rvd24g5Zu05qCP44CB5peg6Kej6YeK5oCn5paH5a2X44CB5peg5bC+6YCX5Y+377yJ77yaCgp7CiAgImRvY190eXBlIjogImpkIHwgY2hhdCB8IGludGVydmlldyB8IG9mZmVyIHwgY29tcGFueSB8IHJlamVjdGlvbiIsCiAgImRvY190eXBlX2NuIjogIuWvueW6lOeahOS4reaWh+exu+Wei+WQjSIsCiAgInZlcmRpY3QiOiAi5LiA5Y+l6K+d5oC75Yik77yM5LiN6LaF6L+HIDQwIOWtlyIsCiAgImNvbmZpZGVuY2UiOiAwIOWIsCAxMDAg55qE5pW05pWw77yMCiAgIml0ZW1z',
+'IjogWwogICAgewogICAgICAicXVvdGUiOiAi5Y6f5paH54mH5q6177yM6YCQ5a2X5byV55SoIiwKICAgICAgImxpdGVyYWwiOiAi5a2X6Z2i5oSP5oCd77yMMTAg5a2X5Lul5YaFIiwKICAgICAgInN1YnRleHQiOiAi55yf5a6e5ZCr5LmJ77yMMzAg5a2X5Lul5YaF77yM55u055m95LiN55WZ5oOF6Z2iIiwKICAgICAgImxldmVsIjogImZhY3QgfCBsaWtlbHkgfCByaXNrIiwKICAgICAgIndoeSI6ICLkuLrku4DkuYjov5nkuYjop6Por7vvvIzkuIDooYzor7TmmI7mjqjnkIbkvp3mja4iLAogICAgICAiYWN0aW9uIjogIuS9oOiv',
+'peaAjuS5iOWBmu+8j+aAjuS5iOWbnu+8jOe7meWPr+ebtOaOpeWkjeWItuS9v+eUqOeahOivneacryIKICAgIH0KICBdLAogICJyZWRfZmxhZ3MiOiBbIumcgOimgeitpuaDleaIluaguOWunueahOWFt+S9k+S6i+mhuSJdLAogICJxdWVzdGlvbnMiOiBbIuS9oOaOpeS4i+adpeW6lOivpeWPjemXrueahCAzIOS4quWFt+S9k+mXrumimO+8jOaBsOWlvSAzIOadoSJdLAogICJzaWxlbmNlIjogIuWOn+aWh+WIu+aEj+WbnumBv+aIluWujOWFqOayoeaPkOOAgeS9huaxguiBjOiAheW6lOivpeefpemBk+eahOS/oeaBryIKfQoKaXRl',
+'bXMg6L6T5Ye6IDMg5YiwIDgg5p2h77yM5oyJ6YeN6KaB5oCn5o6S5bqP44CC5byA5ZCv5Y+M5ZCR5qih5byP5pe277yMc2hhZG93X2l0ZW1zIOavj+adoeagvOW8j++8mgp7ICJxdW90ZSI6ICLmsYLogYzogIXljp/or53vvIzpgJDlrZflvJXnlKgiLCAicmVhZF9hcyI6ICLmi5vogZjmlrnkvJror7vlh7rnmoTlkKvkuYnvvIwzMCDlrZfku6XlhoUiLCAibGV2ZWwiOiAiZmFjdCB8IGxpa2VseSB8IHJpc2siLCAiYmV0dGVyIjogIuabtOS8mOihqOi+vu+8jOWPr+ebtOaOpeWkjeWItueahOWujOaVtOivneacryIgfQoK44CQ5ZCE',
+'57G75Z6L6Kej56CB6KeE5YiZ5bqT44CRCkpE77yaCi0g6Jaq6LWE5YaZIumdouiuriAvIOacieernuS6ieWKmyAvIOiMg+WbtOS4iumZkOW+iOmrmCIg4oaSIOmihOeul+S9juS6juW4guWcuu+8jOaIluWMuumXtOWuveWIsOayoeaEj+S5iQotICLmipfljovog73lipvlvLogLyDog73pgILlupTlv6vpgJ/lj5jljJYiIOKGkiDliqDnj63lpJrvvIzmiJbkuJrliqHmlrnlkJHpopHnuYHlj5jliqgKLSAi6IO954us56uL6LSf6LSjIC8g5LuOIDAg5YiwIDEgLyDmi6XmirHkuI3noa7lrprmgKciIOKGkiDmsqHkurrluKbkvaDjgIHo',
+'tYTmupDlsJHjgIHogYzotKPovrnnlYzmqKHns4oKLSAi5oiQ6ZW/56m66Ze05aSnIC8g5a2m5Lmg5py65Lya5aSaIC8g5omB5bmz566h55CGIiDihpIg57uZ5LiN5LqG5Yy56YWN55qE6ZKxCi0gIuW8ueaAp+W3peS9nCIg4oaSIOWkp+amgueOh+ayoeWKoOePrei0ue+8jOS4lOS4i+ePreaXtumXtOeUsemcgOaxguWGs+WumgotIOWQjOS4gOWyl+S9jemVv+acn+aMguedgCAvIOWPjeWkjeWIt+aWsCDihpIg5oub5LqG5b6I5LmF5rKh5oub5Yiw77yM6K2m5oOV5YmN5Lu756a76IGM5Y6f5ZugCi0g5LuO5aS05Yiw5bC+5rKh5o+Q',
+'5rGH5oql5a+56LGh44CB5Zui6Zif6KeE5qihIOKGkiDnu4Tnu4fnu5PmnoTkuI3muIXvvIzlhaXogYzlkI7lpKfmpoLnjofmt7fkubEKCuaLm+iBmOaWueWvueivne+8mgotIOWbnuWkjemAn+W6pumqpOmZjeOAgeWtl+aVsOWPmOWwkeOAgeWPquWbniLlpb3nmoQiIuaUtuWIsCIg4oaSIOS9oOS4jeaYr+S8mOWFiOWAmemAieS6ugotIOWPjeWkjei/vemXruacn+acm+iWqui1hO+8jOS9huS4jemAj+mcsuiHquW3seeahOmihOeulyDihpIg55So5L2g55qE5pWw5a2X5YGa6ZSa54K55p2l56CN5Lu3Ci0gIuaIkeS7rOi/mOWcqOmd',
+'ouWFtuS7luWAmemAieS6uiIg4oaSIOaWveWOi+ivneacr++8jOS4jeeUqOaFjAotIOmAmuevh+aooeadv+ivneacr+OAgeetlOmdnuaJgOmXriDihpIg5rWB5rC057q/5oub6IGY77yM5bKX5L2N5Y+v6IO9IEpEIOmDveS4jeWHhgotIOS4u+WKqOWKoOW+ruS/oeOAgeS4u+WKqOe6puaXtumXtOOAgeS7i+e7jeWboumYn+e7huiKgiDihpIg55yf5a6e5YW06Laj5L+h5Y+377yI5Lmf6KaB5q2j6Z2i6K+G5Yir77yJCgrpnaLor5XovazlhpnvvJoKLSDpnaLor5XlrpjlsLHmn5Dngrnov57nu63ov73pl67kuKTlsYLku6XkuIog4oaS',
+'IOi/meaYr+S7luecn+ato+WFs+W/g+eahO+8jOS5n+aYr+S9oOeahOiDnOi0n+aJiwotIOWbnuetlOWQjuWvueaWueWPquivtCLll68iIuaMuuWlveeahCLnhLblkI7mjaLor53popgg4oaSIOi/meS4quWbnuetlOayoemAmui/h++8jOaIluS7luS4jeWFs+W/gwotICLkvaDov5jmnInku4DkuYjmg7Ppl67miJHku6znmoQi5LmL5ZCO5a+55pa555qE5Zue562UIOKGkiDliKTmlq3lm6LpmJ/msJvlm7TnmoTpq5jkv6Hmga/ph4/niYfmrrUKLSDnqoHnhLbmipvlh7rkuIDkuKrotJ/pnaLlgYforr7vvIgi5aaC5p6c5Lik5Liq5pyI',
+'5rKh5Ye657uT5p6c5oCO5LmI5YqeIu+8ieKGkiDljovlipvmtYvor5XvvIzkuI3mmK/otKjnlpEKCk9mZmVyIC8g6Jaq6YWs77yaCi0g5bqV6Jaq5L2OICsg57up5pWI5Y2g5q+U6auYIOKGkiDlrp7pmYXliLDmiYvov5zkvY7kuo7lkI3kuYnolqrotYTvvIzov73pl67ljoblj7Lnu6nmlYjlj5HmlL7mr5TkvosKLSDnu5nmnJ/mnYPkvYbmsqHmj5Dlm57otK3mnaHmrL4gLyDooYzmnYPku7cg4oaSIOe6uOmdoui0ouWvjO+8jOS7t+WAvOaOpei/kSAwCi0g6K+V55So5pyf5omT5oqY5oiW6LaF6ZW/IOKGkiDouKnms5XlvovkuIvp',
+'mZDvvIznu5PlkIjnu6nmlYjnu5PmnoTlrp7pmYXliLDmiYvmm7TkvY7vvIzlj6/osIgKLSDnq57kuJrljY/orq7ojIPlm7Tov4flrr0g4oaSIOWPr+iDveW9seWTjeS4i+S4gOS7veW3peS9nAotIOS7juS4jeato+mdouWbnuetlOiWqumFrOe7k+aehCDihpIg5pyA5Y2x6Zmp55qE5L+h5Y+3Cgrlhazlj7jkv6Hmga/vvJoKLSDkuIrkuIDova7ono3otYTotoXov4cgMTgg5Liq5pyI5LiU5peg5Lqn5ZOB5Yqo5oCBIOKGkiDnjrDph5HmtYHljbHpmakKLSDlkIzkuIDlspfkvY3plb/mnJ/lpKfph4/lnKjmi5sg4oaSIOa1geWkseeO',
+'h+mrmAotIOWPguS/neS6uuaVsOi/nOS9juS6juWuo+ensOinhOaooSDihpIg5aSW5YyF5oiW55qu5YyFCi0g5a6Y572R5YWo5piv5qaC5b+15rKh5pyJ5YW35L2T5Lqn5ZOB5ZCNIOKGkiDlj6/og73ov5jmsqEgUE1GCgrmi5Lkv6HvvJoKLSDlrozlhajmqKHmnb/jgIHml6Dku7vkvZXkuKrmgKfljJYg4oaSIOS6uua1t+etm+afpe+8jOS4jeS7o+ihqOiDveWKm+WQpuWumgotIOe7meWHuuWFt+S9k+WPjemmiCDihpIg55yf5a6e5Y6f5Zug77yM5LiU6YCa5bi45LuN5pyJ5LqM5qyh5py65Lya'];
+function getPrompt(){
+  const bin=atob(PROMPT_B64.join(''));
+  return new TextDecoder().decode(Uint8Array.from(bin,c=>c.charCodeAt(0)));
+}
+
+/* ============ 通用 ============ */
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+let toastT;
+function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('on');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('on'),2200);}
+async function copyText(t){try{await navigator.clipboard.writeText(t);}catch(e){const ta=document.createElement('textarea');ta.value=t;ta.style.cssText='position:fixed;opacity:0';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();}toast('已复制');}
+
+/* ============ 配置 ============ */
+const CFG_KEY='subtext.cfg';
+const PRESETS=[
+  {name:'DeepSeek',base:'https://api.deepseek.com/v1',model:'deepseek-chat'},
+  {name:'火山方舟',base:'https://ark.cn-beijing.volces.com/api/v3',model:'doubao-seed-1.6-32k-250615'},
+  {name:'Kimi',base:'https://api.moonshot.cn/v1',model:'moonshot-v1-8k'},
+  {name:'OpenAI',base:'https://api.openai.com/v1',model:'gpt-4o-mini'},
+];
+const getCfg=()=>{try{return JSON.parse(localStorage.getItem(CFG_KEY))||{}}catch(e){return{}}};
+function refreshHint(){
+  const c=getCfg(),ok=c.base&&c.model&&c.key;
+  const h=$('#cfgHint');h.classList.toggle('ok',!!ok);
+  $('#cfgHintTxt').textContent=ok?('已配置 · '+(c.name||'自定义')+' · '+c.model):'未配置模型 — 点击右上角「模型配置」填入你自己的 API Key';
+  $('#btnSettings').classList.toggle('ok',!!ok);
+}
+
+/* ============ 设置抽屉 ============ */
+const drawer=$('#drawer'),overlay=$('#overlay');
+function openDr(){const c=getCfg();$('#f_base').value=c.base||'';$('#f_model').value=c.model||'';$('#f_key').value=c.key||'';
+  $('#testStatus').textContent='';$('#testStatus').className='tstatus';renderChips();drawer.classList.add('on');overlay.classList.add('on');}
+function closeDr(){drawer.classList.remove('on');overlay.classList.remove('on');}
+$('#btnSettings').onclick=openDr;$('#btnCloseDr').onclick=closeDr;overlay.onclick=closeDr;
+function renderChips(){
+  const c=getCfg();const box=$('#presetChips');box.innerHTML='';
+  PRESETS.forEach(p=>{
+    const b=document.createElement('button');b.textContent=p.name;
+    b.className=(c.base===p.base&&c.model===p.model)?'on':'';
+    b.onclick=()=>{$('#f_base').value=p.base;$('#f_model').value=p.model;renderChips();};
+    box.appendChild(b);
+  });
+  const cb=document.createElement('button');cb.textContent='自定义';
+  cb.className=PRESETS.some(p=>p.base===c.base&&p.model===c.model)?'':'on';
+  cb.onclick=()=>{$('#f_base').value='';$('#f_model').value='';$('#f_base').focus();renderChips();};
+  box.appendChild(cb);
+}
+$('#btnEye').onclick=()=>{const k=$('#f_key');k.type=k.type==='password'?'text':'password';$('#btnEye').textContent=k.type==='password'?'显示':'隐藏';};
+$('#btnSave').onclick=()=>{
+  const base=$('#f_base').value.trim().replace(/\/+$/,''),model=$('#f_model').value.trim(),key=$('#f_key').value.trim();
+  if(!base||!model||!key){toast('Base URL / 模型名 / Key 需全部填写');return;}
+  const p=PRESETS.find(p=>p.base===base&&p.model===model);
+  localStorage.setItem(CFG_KEY,JSON.stringify({base,model,key,name:p?p.name:'自定义'}));
+  refreshHint();closeDr();toast('已保存到本浏览器');
+};
+$('#btnClear').onclick=()=>{localStorage.removeItem(CFG_KEY);refreshHint();closeDr();toast('已清除本机配置');};
+$('#btnTest').onclick=async()=>{
+  const base=$('#f_base').value.trim().replace(/\/+$/,''),model=$('#f_model').value.trim(),key=$('#f_key').value.trim();
+  const st=$('#testStatus');
+  if(!base||!model||!key){st.className='tstatus bad';st.textContent='请先填齐 Base URL / 模型名 / Key';return;}
+  st.className='tstatus';st.textContent='测试中…';
+  const ctrl=new AbortController();const tid=setTimeout(()=>ctrl.abort(),30000);
+  try{
+    const r=await fetch(base+'/chat/completions',{method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
+      body:JSON.stringify({model,messages:[{role:'user',content:'回复：ok'}],max_tokens:8,stream:false}),signal:ctrl.signal});
+    clearTimeout(tid);
+    if(r.ok){st.className='tstatus ok';st.textContent='连接成功 · '+model+' 可用（该服务商允许浏览器直连）';}
+    else{let d='';try{d=(await r.json()).error?.message||''}catch(e){}
+      st.className='tstatus bad';
+      st.textContent=r.status===401?'Key 无效或未授权':r.status===404?'路径不存在：检查 Base URL 是否需要以 /v1 结尾':'HTTP '+r.status+(d?' · '+d:'');}
+  }catch(e){clearTimeout(tid);st.className='tstatus bad';
+    st.textContent='直连失败：网络不可达，或该服务商不允许浏览器跨域调用（CORS）— 建议改用其他预设';}
+};
+
+/* ============ JSON 容错解析 ============ */
+function parseJSONLoose(s){
+  if(!s)return null;s=s.trim();
+  const m=s.match(/```(?:json)?\s*([\s\S]*?)```/);if(m)s=m[1].trim();
+  const a=s.indexOf('{'),b=s.lastIndexOf('}');
+  if(a>-1&&b>a)s=s.slice(a,b+1);
+  const tries=[s,
+    s.replace(/,\s*([}\]])/g,'$1'),
+    s.replace(/,\s*([}\]])/g,'$1').replace(/([{,]\s*)([A-Za-z_]\w*)\s*:/g,'$1"$2":')];
+  for(const t of tries){try{return JSON.parse(t)}catch(e){}}
+  return null;
+}
+
+/* ============ 请求与解码 ============ */
+let running=false;
+const LV={fact:['事实','lv-fact'],likely:['推测','lv-likely'],risk:['风险','lv-risk']};
+$('#btnDecode').onclick=runDecode;
+document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter')runDecode();});
+async function runDecode(){
+  if(running)return;
+  const c=getCfg();
+  if(!c.base||!c.model||!c.key){openDr();toast('请先配置模型服务');return;}
+  const text=$('#inputText').value.trim();
+  if(text.length<10){toast('请先粘贴要解码的文本（至少 10 字）');return;}
+  if(text.length>6000)toast('文本较长（'+text.length+' 字），模型输出可能被截断，建议分段粘贴');
+  running=true;const btn=$('#btnDecode');btn.disabled=true;btn.textContent='解 码 中';
+  $('#resultArea').innerHTML=loadingHTML();
+  try{
+    const ctrl=new AbortController();const tid=setTimeout(()=>ctrl.abort(),60000);
+    const r=await fetch(c.base+'/chat/completions',{method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+c.key},
+      body:JSON.stringify({model:c.model,temperature:0.4,max_tokens:8000,stream:false,
+        messages:[{role:'system',content:getPrompt()},
+                  {role:'user',content:($('#shadowToggle').checked?'[双向模式开启]\n\n':'')+text}]}),
+      signal:ctrl.signal});
+    clearTimeout(tid);
+    if(!r.ok){let d='';try{d=(await r.json()).error?.message||''}catch(e){}
+      throw new Error(r.status===401?'Key 无效或未授权（HTTP 401）':'API 返回 HTTP '+r.status+(d?' · '+d:''));}
+    const j=await r.json();
+    const content=j.choices?.[0]?.message?.content||'';
+    const data=parseJSONLoose(content);
+    if(!data)showParseError(content);
+    else renderResult(data,text,false);
+  }catch(e){
+    $('#resultArea').innerHTML=errHTML(e.name==='AbortError'?'请求超时（60 秒）。可重试，或换更快的模型 / 服务商。':esc(e.message));
+  }finally{running=false;btn.disabled=false;btn.textContent='开始解码';}
+}
+function loadingHTML(){
+  const lines=['建立档案…','识别文本类型…','剥离包装语言…','交叉比对行业规则库…','校验证据引用…','组装反问话术…'];
+  return `<div class="card"><div class="sec-h"><span class="no">DECODING</span>解码进行中</div><div class="sec-b loading">${
+    lines.map((l,i)=>`<div class="lline" style="animation-delay:${i*.45}s">${l}<i>_</i></div>`).join('')}</div></div>`;
+}
+function errHTML(msg){
+  return `<div class="card err"><div class="sec-h"><span class="no">ERROR</span>解码失败</div>
+  <div class="sec-b">${msg}<br><button class="copy-all" style="margin-top:12px" onclick="location.reload()">刷新重试</button></div></div>`;
+}
+function showParseError(raw){
+  $('#resultArea').innerHTML=`<div class="card err"><div class="sec-h"><span class="no">ERROR</span>模型输出无法解析为 JSON</div>
+  <div class="sec-b">${!/}\s*$/.test(String(raw||'').trim())?'<b style="color:var(--red)">输出疑似被 max_tokens 截断</b>（结尾不是完整的 }）。长文本请分段粘贴，或换用上下文更长的模型。<br><br>':''}可重试一次；若反复失败，说明该模型 JSON 遵循能力较弱，建议换用 deepseek-chat 或其他更强模型。
+  <details><summary>查看模型原始输出</summary><pre>${esc(raw)}</pre></details>
+  <br><button class="copy-all" onclick="runDecode()">重试解码</button></div></div>`;
+}
+
+/* ============ 渲染 ============ */
+function highlightSrc(text,quotes){
+  let h=esc(text);
+  const qs=[...new Set(quotes.filter(q=>q&&String(q).trim().length>=4).map(q=>String(q)))].sort((a,b)=>b.length-a.length);
+  qs.forEach((q,i)=>{h=h.split(esc(q)).join('\u0001'+i+'\u0001');});
+  qs.forEach((q,i)=>{h=h.split('\u0001'+i+'\u0001').join('<mark class="qm">'+esc(q)+'</mark>');});
+  return h;
+}
+function renderResult(d,srcText,isExample){
+  d.items=d.items||[];d.questions=(d.questions||[]).slice(0,3);
+  const quotes=d.items.map(x=>x.quote).concat((d.shadow_items||[]).map(x=>x.quote));
+  let i=0;const dl=()=>'--d:'+(i++*0.09)+'s';
+  const NUM=['②','③','④','⑤','⑥'];let ni=0;const nx=()=>NUM[ni++]||'⑦';
+  let html='';
+  /* meta + verdict */
+  html+=`<div class="card" style="${dl()}"><div class="meta">
+    <span class="tag">自动识别 · ${esc(d.doc_type_cn||d.doc_type||'未知类型')}</span>
+    ${isExample?'<span class="tag demo">内置示例 · 无需 API Key</span>':''}
+    <span class="conf">置信 ${esc(d.confidence??'-')}<span class="bar"><i style="width:${Math.min(100,+d.confidence||0)}%"></i></span></span></div>
+    <div class="sec-b"><div class="verdict">${esc(d.verdict)}</div></div></div>`;
+  /* items */
+  if(d.items.length){
+    html+=`<div class="card" style="${dl()}"><div class="sec-h"><span class="no">${nx()}</span>逐条解码<small>引用即证据 · 颜色=强度</small></div><div class="sec-b">`;
+    d.items.forEach(it=>{
+      const lv=LV[it.level]||LV.likely;
+      html+=`<div class="item ${lv[1]}"><div class="item-top"><span class="quote">「${esc(it.quote)}」</span><span class="lv ${lv[1]}">${lv[0]}</span></div>
+      <dl class="pair"><dt>字面</dt><dd><span class="lit">${esc(it.literal)}</span></dd>
+      <dt>潜台词</dt><dd><span class="sub">${esc(it.subtext)}</span></dd></dl>
+      <div class="why">${esc(it.why)}</div>
+      <div class="act"><span class="lab">应对</span><p>${esc(it.action)}</p><button class="cbtn" onclick="copyText(this.closest('.act').querySelector('p').textContent)">复制</button></div></div>`;
+    });
+    html+='</div></div>';
+  }
+  /* shadow */
+  if(d.shadow_items&&d.shadow_items.length){
+    html+=`<div class="card shadow-card" style="${dl()}"><div class="sec-h"><span class="no">${nx()}</span>双向审视<small>你的话，对方读出了什么 · <b>审视你自己</b></small></div><div class="sec-b">`;
+    d.shadow_items.forEach(it=>{
+      const lv=LV[it.level]||LV.likely;
+      html+=`<div class="sitem"><div class="item-top"><span class="quote">「${esc(it.quote)}」</span><span class="lv ${lv[1]}">${lv[0]}</span></div>
+      <dl class="srow"><dt>对方读出</dt><dd><span class="sub">${esc(it.read_as)}</span></dd></dl>
+      <div class="better"><span class="lab">更优表达</span><p>${esc(it.better)}</p><button class="cbtn" onclick="copyText(this.closest('.better').querySelector('p').textContent)">复制</button></div></div>`;
+    });
+    html+='</div></div>';
+  }
+  /* red flags */
+  if(d.red_flags&&d.red_flags.length){
+    html+=`<div class="card" style="${dl()}"><div class="sec-h"><span class="no">${nx()}</span>红灯清单<small>需要警惕或核实</small></div><div class="sec-b"><ul class="flags">${
+      d.red_flags.map(f=>`<li>${esc(f)}</li>`).join('')}</ul></div></div>`;
+  }
+  /* questions */
+  if(d.questions.length){
+    html+=`<div class="card" style="${dl()}"><div class="sec-h"><span class="no">${nx()}</span>你应该反问的三个问题
+      <button class="copy-all" onclick="copyText([...document.querySelectorAll('.qlist li')].map((li,i)=>(i+1)+'. '+li.textContent.replace(/^\\d+\\.?/,'')).join('\\n'))">一键复制全部</button></div>
+      <div class="sec-b"><ul class="qlist">${d.questions.map((q,n)=>`<li data-n="0${n+1}">${esc(q)}</li>`).join('')}</ul></div></div>`;
+  }
+  /* silence */
+  if(d.silence){
+    html+=`<div class="card silence" style="${dl()}"><div class="sec-h"><span class="no">${nx()}</span>沉默的信息<small>没说出口的，往往更关键</small></div>
+    <div class="sec-b"><div class="card-in">${esc(d.silence)}</div></div></div>`;
+  }
+  $('#resultArea').innerHTML=html;
+  const sp=$('#srcPanel');sp.hidden=false;
+  $('#srcBody').innerHTML=highlightSrc(srcText,quotes);
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+/* ============ 内置示例库（预置解码结果，无 Key 可看） ============ */
+const EXAMPLES=[
+{label:'BOSS 对话',input:`我：您好，我看到您发布的资深后端岗位，我有4年Go开发经验，很感兴趣。
+HR：你好，看了你的简历，背景还不错。方便说下你目前的期望薪资吗？
+我：我现在18K，期望25K以上，不过如果平台好，薪资都可以聊的。
+HR：好的，25K有点超出我们的预算了。我们还在面其他候选人，你先等通知。
+（三天后）
+我：请问面试结果出来了吗？
+HR：亲，最近比较忙，还没有呢，有消息会第一时间通知你的。`,
+result:{doc_type:'chat',doc_type_cn:'招聘方对话',verdict:'你把底牌全交了：先亮薪资再松口，对方立刻用"预算超了"开始砍价',confidence:88,
+items:[
+{quote:'方便说下你目前的期望薪资吗？',literal:'问期望薪资',subtext:'开场就问价，是要拿你的数字当砍价锚点，不是谈薪',level:'likely',why:'还没介绍岗位任何细节就先问价，顺序反常',action:'反问："贵司这个岗位的薪酬预算范围是多少？我评估下是否匹配"'},
+{quote:'25K有点超出我们的预算了',literal:'预算不够',subtext:'你的数字已被当砍价起点，"预算"是真的，但空间没到零',level:'likely',why:'刚报完期望就喊超预算，是标准压价剧本',action:'回："预算范围具体是多少？合理的话我可以接受沟通"'},
+{quote:'我们还在面其他候选人',literal:'还有别人',subtext:'半真半假的施压话术，配合压价使用',level:'likely',why:'紧跟你报高价之后出现，施压意图明显',action:'不接招，稳住："好的，我也在并行看几个机会"'},
+{quote:'亲，最近比较忙，还没有呢',literal:'再等等',subtext:'你不是优先候选人，大概率在流程里靠后或已被筛掉',level:'risk',why:'主动跟进三天无实质回复，且语气完全模板化',action:'再等一周，同时把这家从"优先"降级，继续投别家'}],
+shadow_items:[
+{quote:'我现在18K，期望25K以上',read_as:'底牌全亮：现薪、底线、涨幅比例都给了，砍价空间直接算出来了',level:'risk',better:'期望 25K 左右，具体可以根据整体薪酬包和职责范围再聊'},
+{quote:'不过如果平台好，薪资都可以聊的',read_as:'"薪资可聊"=我愿意让步，对方会直接按预算下限报价',level:'risk',better:'删掉这句。让步意愿留到对方报出具体数字之后再表达'},
+{quote:'请问面试结果出来了吗？',read_as:'三天就催，暴露急迫感，进一步削弱你的议价位置',level:'likely',better:'等 7-10 天再跟进，或带新进展跟进："这周刚完成一个相关项目，同步给您"'}],
+red_flags:['HR 全程未透露该岗位的预算范围','流程停在问薪环节，从未约面试或问技术背景'],
+questions:['这个岗位的薪酬预算范围是多少？','后续面试流程有几轮、大概多久走完？','这个岗位紧急吗，期望的到岗时间是什么时候？'],
+silence:'对方没提任何技术细节、团队情况，也没问你的技术问题——对话重心全在薪资。要么是 KPI 式海筛，要么钱就是这个岗位最大的短板。'}},
+
+{label:'招聘 JD',input:`高级前端开发工程师（急招）
+薪资：15-30K·14薪（面议）
+岗位职责：
+1. 能独立负责从0到1搭建前端架构，拥抱不确定性
+2. 参与公司核心产品研发，需要抗压能力强，适应快速变化的业务
+3. 弹性工作制，扁平化管理
+任职要求：
+1. 3年以上经验，熟悉 Vue/React
+2. 有成长空间大的平台等你来，学习机会多
+加分项：会 Node、会小程序、会 UI 设计
+我们是一支年轻有活力的团队，福利：下午茶、团建、期权激励。`,
+result:{doc_type:'jd',doc_type_cn:'JD 招聘启事',verdict:'典型低预算换全能型岗位：钱少事多没人带，用期权和下午茶补差价',confidence:82,
+items:[
+{quote:'能独立负责从0到1搭建前端架构，拥抱不确定性',literal:'独立搭建架构',subtext:'没有现成架构、没人带你，前端大概率只有你一个人',level:'fact',why:'"从0到1"+"独立负责"组合，说明无团队可依赖',action:'面试必问："前端团队现在几个人？我入职后汇报给谁？"'},
+{quote:'薪资：15-30K·14薪（面议）',literal:'薪资面议',subtext:'区间宽到没意义，实际预算大概率贴着 15K 谈',level:'likely',why:'跨度 100% 且标注面议，说明上限是幌子',action:'期望薪资贴 25K 报，给自己留出被砍的空间'},
+{quote:'需要抗压能力强，适应快速变化的业务',literal:'能扛压力',subtext:'常态加班，且业务方向随时可能推倒重来',level:'likely',why:'"快速变化"修饰的是业务而非成长，指向方向不稳',action:'追问："上一次业务方向大调整是什么时候？"'},
+{quote:'弹性工作制',literal:'时间自由',subtext:'大概率没加班费，下班时间由需求决定',level:'likely',why:'国内语境里"弹性"几乎从不指"晚到早走"',action:'直接问："团队一般几点下班？最晚到过几点？"'},
+{quote:'成长空间大的平台等你来，学习机会多',literal:'成长快',subtext:'给不了匹配的钱，用成长话术补偿',level:'likely',why:'与低薪资区间和期权激励组合出现，是经典替代方案',action:'把"成长"翻译成可验证的问题："过去一年团队有人晋升或涨薪吗？"'},
+{quote:'期权激励',literal:'给期权',subtext:'未上市公司的期权是纸面财富，价值接近 0',level:'risk',why:'未提轮次、行权价、回购，无法估值',action:'问清：融资轮次、行权价、回购条款；答不上就按 0 计入薪酬包'}],
+red_flags:['14薪中多出的 4 薪是否含绩效、绩效占比均未说明','"年轻有活力的团队"常是低薪+加班的委婉说法','全篇未提汇报对象与团队规模'],
+questions:['前端团队现在几个人，我入职后汇报给谁？','这个岗位的上一任为什么离开？','期权的行权价和回购条款分别是什么？'],
+silence:'通篇没提上班时间、加班补偿、五险一金缴纳基数。用"下午茶、团建"充当福利主体，通常是现金福利匮乏的信号。'}},
+
+{label:'Offer 邮件',input:`录用通知
+您好，我们很高兴通知您通过面试，录用为产品经理（P5），具体如下：
+1. 月薪：税前 16,000 元，其中基本工资 10,000 元，绩效工资 6,000 元，绩效根据季度考核发放（考核系数 0-1.2）
+2. 试用期 6 个月，试用期工资为转正工资的 80%
+3. 入职赠送 10,000 股期权，分 4 年归属，具体以期权协议为准
+4. 签订 3 年劳动合同，竞业限制适用公司全员
+5. 五险一金按最低基数缴纳
+期待您的加入！`,
+result:{doc_type:'offer',doc_type_cn:'Offer / 薪酬沟通',verdict:'名义 16K 实际可能不足 12K：绩效占 37% 且系数下限为 0，社保按最低基数缴纳',confidence:90,
+items:[
+{quote:'基本工资 10,000 元，绩效工资 6,000 元，绩效根据季度考核发放（考核系数 0-1.2）',literal:'底薪加绩效',subtext:'每月固定 6K 是池子里的鱼：系数下限 0 意味着绩效可以一分不发',level:'fact',why:'0-1.2 的系数下限为 0，等于公司保留了每月少发 6K 的空间；能否全额扣减存在法律争议',action:'必谈：基本工资提到 13K 以上；或问"去年同职级团队平均考核系数多少"'},
+{quote:'试用期 6 个月，试用期工资为转正工资的 80%',literal:'试用期打折',subtext:'80% 正是法律允许的下限，合法但零诚意，叠加绩效结构实际到手更低',level:'fact',why:'80% 是劳动合同法实施条例的下限，公司精准踩线',action:'主张试用期发 90% 或全额，这是 Offer 阶段最常见的可谈点'},
+{quote:'入职赠送 10,000 股期权，分 4 年归属，具体以期权协议为准',literal:'给期权',subtext:'没行权价、没估值、没回购条款的期权，纸面价值接近 0',level:'likely',why:'"以协议为准"的非上市期权基本无法变现，且"赠送"表述意在回避其对价属性',action:'签字前要三样：行权价、公司最近一轮估值、离职回购条款'},
+{quote:'竞业限制适用公司全员',literal:'全员竞业',subtext:'离职后可能被限制加入竞品，补偿标准还由公司说了算',level:'risk',why:'法定竞业人员限于高管、高技及负有保密义务者，全员签效力存疑，但离职时仍可能被拿来施压',action:'要书面竞业协议文本，确认限制范围、期限和月度补偿标准；注意未约定补偿的可主张权利'},
+{quote:'五险一金按最低基数缴纳',literal:'社保按最低交',subtext:'公积金和养老金直接受损，同时暴露公司成本导向文化',level:'fact',why:'按实际工资缴纳是法定义务，按最低基数属违法操作',action:'谈：按实际工资缴纳，或把差额折现进现金薪资'}],
+red_flags:['绩效系数下限为 0，6K 绩效工资无保障','社保公积金按最低基数缴纳属未足额缴纳，影响公积金贷款额度与养老金','期权三无：无估值、无行权价、无回购说明'],
+questions:['去年同职级员工的平均绩效系数是多少？','期权协议里的行权价和离职回购条款是什么？','五险一金能否按实际工资基数缴纳？'],
+silence:'没提年终奖、调薪机制、加班与加班费。绩效占 37.5% 的结构意味着公司给自己留了每月少付 6K 的合法空间——业务一波动这会第一个用上。'}},
+
+{label:'面试转写',input:`面试官：先简单介绍下你最近做的这个项目吧。
+我：我负责一个数据中台，把各业务线的埋点数据统一收口，做了一套指标口径管理。
+面试官：这套口径管理，是你们自己定的还是业务方定的？
+我：我们一起对齐的，会开会评审。
+面试官：如果业务方不认怎么办？
+我：一般会再沟通，实在不行就按我们的来。
+面试官：（停顿两秒）嗯，挺好的。那我们换个话题，你平时怎么跟产品配合？
+我：产品提需求，我评估排期，然后排期开发。
+面试官：好。你还有什么想问我们的吗？
+我：团队现在多少人，业务处于什么阶段？
+面试官：团队十来个人，业务还在快速探索，方向会经常调。你还有什么想问的吗？
+我：没有了，谢谢。`,
+result:{doc_type:'interview',doc_type_cn:'面试转写',verdict:'追问口径归属那段是你答砸的地方，最后一句「没有了」又丢了一次翻盘机会',confidence:80,
+items:[
+{quote:'如果业务方不认怎么办？',literal:'追问冲突处理',subtext:'这是他真正关心的：你有没有跨部门推动的能力',level:'fact',why:'就同一细节连续追问两层，追问点就是本次的评分维度',action:'补一个具体案例："去年有业务方坚持用自己的口径，我做了双轨对照跑了两周，用数据说服他们切换"'},
+{quote:'实在不行就按我们的来',literal:'有决断',subtext:'暴露你缺少协作手段，最后只能靠职权硬压',level:'risk',why:'面试官在此处停顿两秒后只回"嗯，挺好的"就换话题，是明确的不通过信号',action:'换成"升级到双方主管共同裁决，并约定一个复盘时间点"'},
+{quote:'嗯，挺好的。那我们换个话题',literal:'认可',subtext:'这个回答没通过，他不想再在这个点上耗时间',level:'likely',why:'中文面试里"挺好的"+立刻换话题，几乎从不表示认可',action:'察觉到这个信号要主动抢话："这块我讲得比较抽象，要不要我拿个具体案例再说一遍？"'},
+{quote:'团队十来个人，业务还在快速探索，方向会经常调',literal:'介绍团队',subtext:'规模小 + 方向频繁调整，权责边界大概率反复变',level:'likely',why:'两个信号同时由面试官本人主动说出，属于提前告知',action:'追问："最近一次方向调整是什么时候？调整之后团队有人离开吗？"'}],
+shadow_items:[
+{quote:'我：没有了，谢谢。',read_as:'最后一问是白送的加分题，直接放弃=你对这个岗位兴趣一般',level:'risk',better:'至少回一个："这个岗位如果三个月后要拿结果，您希望我先把哪件事做起来？"'},
+{quote:'产品提需求，我评估排期，然后排期开发。',read_as:'把自己描述成纯执行角色，全程没有任何主动性',level:'likely',better:'"我会在需求评审阶段就介入，先问清楚业务目标，再和他们对排期"'},
+{quote:'我：一般会再沟通，实在不行就按我们的来。',read_as:'沟通失败就上权限，说明你没有备选方案',level:'risk',better:'"先对齐口径差异的业务影响，拿数据说话；分歧仍在就升级，并给一个试运行期"'}],
+red_flags:['整场没有被追问任何技术细节，说明这个岗位更看重协作与推动力，而非技术深度','"方向会经常调"由面试官亲口说出，等于提前告知业务不稳定'],
+questions:['您刚才追问口径归属那段，理想的答案应该是什么样的？','这个岗位入职后前三个月，最需要先解决的具体问题是什么？','团队最近一次方向调整之后，有人离开吗？'],
+silence:'整场没问你任何技术深度问题，也没介绍汇报线和晋升路径。十来个人 + 方向频繁调整，通常意味着没有成熟的方法论沉淀，进来大概率要自己趟路——而这些他一句都没主动提。'}},
+
+{label:'拒信',input:`（面试结束时，面试官口头说了一句：「你那个指标体系的思路挺有意思的，我们内部也在做类似的事。」）
+
+三天后收到邮件：
+您好：
+感谢您参加我司产品经理岗位的面试，也感谢您对我们公司的关注。
+经过综合评估，我们认为您目前与该岗位的匹配度还有一定差距，因此本次未能通过。
+您的简历将进入我司人才库，未来如有合适岗位我们会再与您联系。
+祝您求职顺利，前程似锦。
+—— XX科技 HR 团队`,
+result:{doc_type:'rejection',doc_type_cn:'拒信 / 反馈',verdict:'模板拒信本身零信息量，真正的信号在面试官那句口头反馈里',confidence:84,
+items:[
+{quote:'经过综合评估，我们认为您目前与该岗位的匹配度还有一定差距',literal:'不匹配',subtext:'标准模板句，不含任何你的个人信息，无法反推真实原因',level:'fact',why:'这句话可以套用在任何候选人身上，是流程化淘汰话术',action:'不要从这个句子里找原因，去找活人问'},
+{quote:'您的简历将进入我司人才库，未来如有合适岗位我们会再与您联系',literal:'保留机会',subtext:'人才库在多数公司等于归档，绝大多数不会再联系',level:'likely',why:'无具体岗位、无时间承诺、无对接人，是收尾客套',action:'若真想要这家，两周内主动投递其他岗位，并在附言里提一句这次的面试'},
+{quote:'你那个指标体系的思路挺有意思的，我们内部也在做类似的事',literal:'随口夸你',subtext:'整封拒信里唯一有信息量的句子：思路被认可，淘汰原因大概率不在能力',level:'likely',why:'面试官主动展开具体工作内容的评价，属非模板行为',action:'三个月后带着新进展联系这位面试官，这是真实可复用的入口'}],
+red_flags:['拒信零个性化，属流程化淘汰，不构成对你能力的否定','若面试中某题答得明显吃力，那大概率是真实淘汰点，只是不会写在信里'],
+questions:['（回 HR）方便反馈一下是哪个环节匹配度有差距吗？一句话就好。','（问面试官）如果贵司之后有新岗位开放，我可以再投递吗？','（问自己）这场面试我答得最吃力的是哪一题？'],
+silence:'没说淘汰的具体环节、没说复试候选人数、也没说你和其他人的差距在哪。一封有用的拒信应该能让你下次少踩一个坑，这封信什么都没给你——所以别在它身上花时间，去问活人。'}},
+
+{label:'公司信息',input:`XX智能科技有限公司
+
+【官网介绍】
+我们致力于用大模型技术重塑企业知识管理，打造下一代智能工作平台，
+为企业提供端到端的 AI 解决方案，赋能千行百业数字化转型。
+
+【公开信息】
+· 2024 年 3 月完成 Pre-A 轮融资，金额未披露
+· 官网产品中心：智能知识库、AI 助手、企业大脑（均为概念页，无客户案例、无定价）
+· 在招岗位（某招聘平台，共 11 个）：前端、后端、算法、产品经理、销售总监、HRBP……
+· 其中「后端工程师」与「算法工程师」已连续在招 8 个月
+· 参保人数：23 人`,
+result:{doc_type:'company',doc_type_cn:'公司公开信息',verdict:'融资两年未更新、岗位长期挂着、参保 23 人：现金流紧张的三个信号叠满了',confidence:78,
+items:[
+{quote:'2024 年 3 月完成 Pre-A 轮融资',literal:'已完成融资',subtext:'距今两年多没有新一轮，现金流大概率吃紧',level:'risk',why:'早期公司通常 12-18 个月需要下一轮，超期未披露是强信号',action:'面试必问："最近一轮融资是什么时候？目前账上现金流能支撑多久？"'},
+{quote:'智能知识库、AI 助手、企业大脑（均为概念页，无客户案例、无定价）',literal:'产品线丰富',subtext:'三个产品都是概念页，说明还没跑通 PMF',level:'likely',why:'有真实客户的公司一定会放 logo 墙和案例，这是最低成本的转化素材',action:'直接问："现在付费客户大概多少家？最大的一家是什么行业？"'},
+{quote:'其中「后端工程师」与「算法工程师」已连续在招 8 个月',literal:'在扩张',subtext:'同一岗位挂 8 个月：要么要求离谱，要么走了人又走',level:'risk',why:'正常招聘周期 1-2 个月，长期挂岗是流失率或内部问题的外显',action:'问："这个岗位是新增还是替补？上一任是什么时候离开的？"'},
+{quote:'参保人数：23 人',literal:'公司规模',subtext:'23 人同时开 11 个岗位，招聘强度与实际体量严重不匹配',level:'likely',why:'11/23 接近 50% 的扩招比例，在现金流吃紧期极不寻常',action:'警惕两种可能：低薪广撒网，或准备换血。要求对方给出组织架构图'}],
+red_flags:['官网零客户案例、零定价，无法验证收入真实性','在招岗位数与参保人数严重不匹配','技术岗长期挂招，必须先确认是新增还是反复离职'],
+questions:['最近一轮融资什么时候？目前现金流能支撑多久？','付费客户有多少家？最大客户的行业是？','后端岗是新增还是替补？上一任什么时候走的？'],
+silence:'没提创始人背景、没提营收规模、没提任何可验证的客户名称。一家真在增长的公司，官网最想展示的就是客户和收入数据——这些一个都没有，说明能拿得出手的东西还不多。进去之前，先按「随时可能发不出工资」做风险预案。'}}
+];
+document.querySelectorAll('.samples button').forEach(b=>{
+  b.onclick=()=>{
+    const ex=EXAMPLES[+b.dataset.ex];
+    $('#inputText').value=ex.input;
+    $('#inputText').dispatchEvent(new Event('input'));
+    renderResult(JSON.parse(JSON.stringify(ex.result)),ex.input,true);
+    const sw=$('#shadowToggle');sw.disabled=true;sw.closest('.switch').classList.add('off');demoMode=true;
+    toast('已载入内置示例：'+ex.label);
+  };
+});
+
+/* ============ 输入计数 ============ */
+let demoMode=false;
+$('#inputText').addEventListener('input',e=>{
+  const n=e.target.value.replace(/\s/g,'').length;
+  $('#charCount').textContent=n+' 字';
+  if(demoMode){demoMode=false;const sw=$('#shadowToggle');sw.disabled=false;sw.closest('.switch').classList.remove('off');}
+});
+
+refreshHint();
+</script>
+</body>
+</html>
