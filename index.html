@@ -144,6 +144,8 @@ textarea::placeholder{color:#B4AA98}
   border:3px double var(--red);padding:10px 22px 10px 26px;transform:rotate(-4deg);opacity:.85;margin-bottom:20px}
 .empty ol{text-align:left;max-width:400px;margin:0 auto;font-size:13px;line-height:2.1;font-family:var(--mono)}
 .loading{padding:26px}
+.spinner{width:16px;height:16px;border:2px solid var(--line);border-top-color:var(--red);border-radius:50%;animation:spin .7s linear infinite;flex:none;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
 .lline{font-family:var(--mono);font-size:13px;color:var(--ink2);padding:7px 0;opacity:0;animation:ll .4s forwards}
 @keyframes ll{to{opacity:1}}
 .lline::before{content:'> ';color:var(--red)}
@@ -195,7 +197,7 @@ footer{position:relative;z-index:1;text-align:center;font-family:var(--mono);fon
   <div class="brand"><i></i>SUBTEXT<em>潜台词解码器</em></div>
   <div class="tagline">在招聘方学会说人话之前，先让你读懂他们。</div>
   <button class="hbtn" id="btnSettings">模型配置<span class="dot"></span></button>
-  <div class="privacy">纯静态、无后端：<b>你的 API Key 与文本只存在这台浏览器</b>，解码时由浏览器直连模型服务商，本站不存储、不转发、无账号。</div>
+  <div class="privacy"><b>你的 API Key 与文本只存在这台浏览器</b>。</div>
 </header>
 
 <main class="wrap">
@@ -235,13 +237,12 @@ footer{position:relative;z-index:1;text-align:center;font-family:var(--mono);fon
   </section>
 </main>
 
-<footer>SUBTEXT · 纯静态单页 · KEY 仅存本地浏览器 · 浏览器直连模型服务商 · 本站无后端无存储</footer>
+<footer>SUBTEXT </footer>
 
 <div class="overlay" id="overlay"></div>
 <aside class="drawer" id="drawer">
   <div class="dr-h"><b>模型配置 · BYOK</b><button class="dr-x" id="btnCloseDr">×</button></div>
   <div class="dr-b">
-    <div class="dr-note">Key 仅保存在<b>这台浏览器</b>的 localStorage，解码请求由你的浏览器<b>直连</b>模型服务商（HTTPS），不经过本站服务器。请自备任一 OpenAI 兼容服务的 API Key。</div>
     <div class="field"><label>预设服务商</label>
       <div class="chips" id="presetChips"></div>
     </div>
@@ -329,14 +330,24 @@ function renderChips(){
   box.appendChild(cb);
 }
 $('#btnEye').onclick=()=>{const k=$('#f_key');k.type=k.type==='password'?'text':'password';$('#btnEye').textContent=k.type==='password'?'显示':'隐藏';};
-$('#btnSave').onclick=()=>{
+function saveCfg(){
   const base=$('#f_base').value.trim().replace(/\/+$/,''),model=$('#f_model').value.trim(),key=$('#f_key').value.trim();
-  if(!base||!model||!key){toast('Base URL / 模型名 / Key 需全部填写');return;}
+  if(!base||!model||!key){toast('Base URL / 模型名 / Key 需全部填写');return false;}
   const p=PRESETS.find(p=>p.base===base&&p.model===model);
-  localStorage.setItem(CFG_KEY,JSON.stringify({base,model,key,name:p?p.name:'自定义'}));
-  refreshHint();closeDr();toast('已保存到本浏览器');
-};
-$('#btnClear').onclick=()=>{localStorage.removeItem(CFG_KEY);refreshHint();closeDr();toast('已清除本机配置');};
+  try{
+    localStorage.setItem(CFG_KEY,JSON.stringify({base,model,key,name:p?p.name:'自定义'}));
+    const back=localStorage.getItem(CFG_KEY);
+    if(!back||back.indexOf(key)<0)throw new Error('readback mismatch');
+  }catch(e){
+    const st=$('#testStatus');st.className='tstatus bad';
+    st.textContent='无法写入本地存储：浏览器禁用了 localStorage（隐私窗口 / 阻止 Cookie 设置 / 存储已满）。请调整后重试。';
+    return false;
+  }
+  refreshHint();closeDr();toast('配置已保存到本浏览器');
+  return true;
+}
+$('#btnSave').onclick=saveCfg;
+$('#btnClear').onclick=()=>{try{localStorage.removeItem(CFG_KEY)}catch(e){}refreshHint();closeDr();toast('已清除本机配置');};
 $('#btnTest').onclick=async()=>{
   const base=$('#f_base').value.trim().replace(/\/+$/,''),model=$('#f_model').value.trim(),key=$('#f_key').value.trim();
   const st=$('#testStatus');
@@ -348,7 +359,10 @@ $('#btnTest').onclick=async()=>{
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
       body:JSON.stringify({model,messages:[{role:'user',content:'回复：ok'}],max_tokens:8,stream:false}),signal:ctrl.signal});
     clearTimeout(tid);
-    if(r.ok){st.className='tstatus ok';st.textContent='连接成功 · '+model+' 可用（该服务商允许浏览器直连）';}
+    if(r.ok){
+      st.className='tstatus ok';st.textContent='连接成功 · '+model+' 可用，正在自动保存…';
+      if(saveCfg())toast('连接成功，配置已自动保存');
+    }
     else{let d='';try{d=(await r.json()).error?.message||''}catch(e){}
       st.className='tstatus bad';
       st.textContent=r.status===401?'Key 无效或未授权':r.status===404?'路径不存在：检查 Base URL 是否需要以 /v1 结尾':'HTTP '+r.status+(d?' · '+d:'');}
@@ -377,12 +391,17 @@ document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Ente
 async function runDecode(){
   if(running)return;
   const c=getCfg();
-  if(!c.base||!c.model||!c.key){openDr();toast('请先配置模型服务');return;}
+  if(!c.base||!c.model||!c.key){
+    $('#resultArea').innerHTML=needCfgCard();
+    openDr();toast('请先完成模型配置并保存');return;
+  }
   const text=$('#inputText').value.trim();
   if(text.length<10){toast('请先粘贴要解码的文本（至少 10 字）');return;}
   if(text.length>6000)toast('文本较长（'+text.length+' 字），模型输出可能被截断，建议分段粘贴');
   running=true;const btn=$('#btnDecode');btn.disabled=true;btn.textContent='解 码 中';
-  $('#resultArea').innerHTML=loadingHTML();
+  $('#resultArea').innerHTML=loadingHTML(c.model);
+  const t0=Date.now();
+  elapsedTimer=setInterval(()=>{$('#elapsed').textContent=((Date.now()-t0)/1000).toFixed(0);},500);
   try{
     const ctrl=new AbortController();const tid=setTimeout(()=>ctrl.abort(),60000);
     const r=await fetch(c.base+'/chat/completions',{method:'POST',
@@ -401,12 +420,27 @@ async function runDecode(){
     else renderResult(data,text,false);
   }catch(e){
     $('#resultArea').innerHTML=errHTML(e.name==='AbortError'?'请求超时（60 秒）。可重试，或换更快的模型 / 服务商。':esc(e.message));
-  }finally{running=false;btn.disabled=false;btn.textContent='开始解码';}
+  }finally{clearInterval(elapsedTimer);running=false;btn.disabled=false;btn.textContent='开始解码';}
 }
-function loadingHTML(){
+let elapsedTimer=null;
+function needCfgCard(){
+  return `<div class="card"><div class="meta"><span class="tag">缺少模型配置</span></div>
+  <div class="sec-b" style="font-size:14px;line-height:2">
+  浏览器还<b>没有可用的 API Key</b>，无法替你请求大模型。请在右侧弹出的配置面板中：
+  <ol style="margin:8px 0 0 20px">
+    <li>选择服务商（或自定义 Base URL）并填入你的 API Key</li>
+    <li>点击「测试连接」成功后配置会<b>自动保存</b>；或直接点击「保存到本机」</li>
+    <li>看到右上角按钮变成<b style="color:var(--green)">绿点</b>后，再点「开始解码」</li>
+  </ol></div></div>`;
+}
+function loadingHTML(model){
   const lines=['建立档案…','识别文本类型…','剥离包装语言…','交叉比对行业规则库…','校验证据引用…','组装反问话术…'];
-  return `<div class="card"><div class="sec-h"><span class="no">DECODING</span>解码进行中</div><div class="sec-b loading">${
-    lines.map((l,i)=>`<div class="lline" style="animation-delay:${i*.45}s">${l}<i>_</i></div>`).join('')}</div></div>`;
+  return `<div class="card"><div class="sec-h"><span class="no">DECODING</span>解码进行中</div>
+  <div class="sec-b"><div style="display:flex;align-items:center;gap:10px;font-size:14px;font-weight:700;margin-bottom:12px">
+  <span class="spinner"></span>正在请求大模型 <span style="font-family:var(--mono);font-weight:400;font-size:12.5px">${esc(model)}</span>
+  <span style="margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--ink2);font-weight:400">已等待 <span id="elapsed">0</span>s</span></div>
+  <div>${
+    lines.map((l,i)=>`<div class="lline" style="animation-delay:${i*.45}s">${l}<i>_</i></div>`).join('')}</div></div></div>`;
 }
 function errHTML(msg){
   return `<div class="card err"><div class="sec-h"><span class="no">ERROR</span>解码失败</div>
